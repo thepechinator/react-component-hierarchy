@@ -4,20 +4,19 @@
 const program = require('commander');
 const path = require('path');
 const babylon = require('babylon');
-const readFileSync = require('fs').readFileSync;
+const { readFileSync } = require('fs');
 const _ = require('lodash');
 const tree = require('pretty-tree');
 
 program
-  .version('1.1.0')
+  .version('1.1.1')
   .usage('[opts] <path/to/rootComponent>')
-  .option(
-    '-m, --module-dir <dir>',
-    'Path to additional modules not included in node_modules e.g. src'
-  )
+  .option('-a, --aliasing  <config>', 'Path to Webpack config for getting module alias definitions')
   .option('-c, --hide-containers', 'Hide redux container components')
-  .option('-t, --hide-third-party', 'Hide third party components')
   .option('-d, --scan-depth <depth>', 'Limit the depth of the component hierarchy that is displayed', parseInt, Number.POSITIVE_INFINITY)
+  .option('-j, --json', 'Output graph to JSON file instead of printing it on screen')
+  .option('-m, --module-dir <dir>', 'Path to additional modules not included in node_modules e.g. src')
+  .option('-t, --hide-third-party', 'Hide third party components')
   .description('React component hierarchy viewer.')
   .parse(process.argv);
 
@@ -25,10 +24,12 @@ if (!program.args[0]) {
   program.help();
 }
 
+const webpackConfigPath = program.aliasing; // to be used
 const hideContainers = program.hideContainers;
+const scanDepth = Math.max(program.scanDepth,1);
+const outputJSON = program.json; // to be used
 const moduleDir = program.moduleDir;
 const hideThirdParty = program.hideThirdParty;
-const scanDepth = Math.max(program.scanDepth,1);
 
 const filename = path.resolve(program.args[0]);
 
@@ -164,7 +165,6 @@ function processFile(node, file, depth) {
     sourceType: 'module',
     plugins: [
       'asyncGenerators',
-      'classProperties',
       'classProperties',
       'decorators',
       'dynamicImport',
