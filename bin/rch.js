@@ -24,7 +24,7 @@ if (!program.args[0]) {
   program.help();
 }
 
-const webpackConfigPath = program.aliasing; // to be used
+const webpackConfigPath = program.aliasing;
 const hideContainers = program.hideContainers;
 const scanDepth = Math.max(program.scanDepth,1);
 const outputJSON = program.json;
@@ -39,6 +39,31 @@ const rootNode = {
   depth: 0,
   children: [],
 };
+
+function getAliases(confPath) {
+  // Ban relative paths to config file
+  if (confPath.substring(0, 2) !== './') {
+    console.error('Path given must be relative to the execution environment.');
+    return {};
+  }
+  if (confPath.includes('../')) {
+    console.error('Backtracking paths are disallowed.');
+    return {};
+  }
+  let resolvedAliases = {};
+  try {
+    const config = require(confPath);
+    if (config != null && config.resolve != null && config.resolve.alias != null) resolvedAliases = config.resolve.alias;
+  } catch (e) {
+    console.error(e.stack);
+  }
+  return resolvedAliases;
+}
+
+let fileAlises = {};
+if (typeof webpackConfigPath === 'string') {
+  fileAlises = getAliases(webpackConfigPath);
+}
 
 function extractModules(bodyItem) {
   if (
@@ -189,7 +214,7 @@ function processFile(node, file, depth) {
     const childComponents = _.uniq(extractChildComponents(ast.tokens, imports));
     node.children = childComponents.map(c => formatChild(c, node, depth));
   } else {
-    // Not JSX.. try to search for a wrapped component
+    // Not JSX... try to search for a wrapped component
     node.children = findContainerChild(node, ast.program.body, imports, depth);
   }
 }
@@ -250,6 +275,7 @@ function done() {
 
 // Get a list of names to try to resolve
 function getPossibleNames(baseName) {
+  // If aliases have been provided (i.e. it is not empty) return these strings, along with any matches baseName has with the aliases
   return [
     baseName,
     baseName.replace('.js', '.jsx'),
@@ -279,12 +305,12 @@ function processNode(node, depth, parent) {
     node.filename = name;
     try {
       const file = readFileSync(node.filename, 'utf8');
-      if(depth <= scanDepth){
+      if (depth <= scanDepth) {
         processFile(node, file, depth);
       }
       node.children.forEach(c => processNode(c, depth + 1, node));
       return;
-    } catch (e) {}
+    } catch (e) { console.error(`Could not open file: ${name}`) }
   }
 
   if (hideThirdParty) {
