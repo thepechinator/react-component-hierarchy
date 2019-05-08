@@ -275,13 +275,25 @@ function done() {
 
 // Get a list of names to try to resolve
 function getPossibleNames(baseName) {
-  // If aliases have been provided (i.e. it is not empty) return these strings, along with any matches baseName has with the aliases
-  return [
+  /** @fixme If aliases have been provided (i.e. it is not empty) return these strings, along with any matches the file name baseName has with the aliases */
+  const list = [
     baseName,
     baseName.replace('.js', '.jsx'),
     baseName.replace('.js', '/index.js'),
     baseName.replace('.js', '/index.jsx'),
   ];
+  // TODO - test
+  if (Object.keys(fileAlises).length > 0) {
+    // Match file name against aliases
+    const red = function resolveAlias(li, [key, value]) {
+      const [component, ...rest] = baseName.split('/');
+      const appended = [value, ...rest].join('/');
+      if (component === key) return li.concat([value, ...rest].join('/'));
+      return li;
+    };
+    li.push(Object.entries(fileAlises).reduce(red, []));
+  }
+  return list;
 }
 
 function processNode(node, depth, parent) {
