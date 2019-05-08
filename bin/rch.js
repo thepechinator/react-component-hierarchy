@@ -4,7 +4,7 @@
 const program = require('commander');
 const path = require('path');
 const babylon = require('babylon');
-const { readFileSync } = require('fs');
+const { readFileSync, writeFileSync } = require('fs');
 const _ = require('lodash');
 const tree = require('pretty-tree');
 
@@ -27,7 +27,7 @@ if (!program.args[0]) {
 const webpackConfigPath = program.aliasing; // to be used
 const hideContainers = program.hideContainers;
 const scanDepth = Math.max(program.scanDepth,1);
-const outputJSON = program.json; // to be used
+const outputJSON = program.json;
 const moduleDir = program.moduleDir;
 const hideThirdParty = program.hideThirdParty;
 
@@ -243,8 +243,8 @@ function done() {
     );
     process.exit(1);
   }
-
-  console.log(tree(formatNodeToPrettyTree(rootNode)));
+  if (outputJSON) writeFileSync('data.json', JSON.stringify(rootNode));
+  else console.log(tree(formatNodeToPrettyTree(rootNode)));
   process.exit();
 }
 
