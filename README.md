@@ -22,14 +22,14 @@ Usage: rch [opts] <path/to/rootComponent>
 React component hierarchy viewer.
 
 Options:
-  -V, --version             Output the version number
+  -V, --version             output the version number
   -a, --aliasing  <config>  Path to Webpack config for getting module alias definitions
   -c, --hide-containers     Hide redux container components
-  -d, --scan-depth <depth>  Limit the depth of the component hierarchy that is displayed
+  -d, --scan-depth <depth>  Limit the depth of the component hierarchy that is displayed (default: null)
   -j, --json                Output graph to JSON file instead of printing it on screen
   -m, --module-dir <dir>    Path to additional modules not included in node_modules e.g. src
   -t, --hide-third-party    Hide third party components
-  -h, --help                Output usage information
+  -h, --help                output usage information
 ```
 
 ## Requirements

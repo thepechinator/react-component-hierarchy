@@ -11,7 +11,7 @@ const tree = require('pretty-tree');
 program
   .version('1.1.1')
   .usage('[opts] <path/to/rootComponent>')
-  .option('-a, --aliasing  <config>', 'Path to Webpack config for getting module alias definitions')
+  // .option('-a, --aliasing  <config>', 'Path to Webpack config for getting module alias definitions')
   .option('-c, --hide-containers', 'Hide redux container components')
   .option('-d, --scan-depth <depth>', 'Limit the depth of the component hierarchy that is displayed', parseInt, Number.POSITIVE_INFINITY)
   .option('-j, --json', 'Output graph to JSON file instead of printing it on screen')
@@ -24,7 +24,7 @@ if (!program.args[0]) {
   program.help();
 }
 
-const webpackConfigPath = program.aliasing;
+// const webpackConfigPath = program.aliasing;
 const hideContainers = program.hideContainers;
 const scanDepth = Math.max(program.scanDepth,1);
 const outputJSON = program.json;
@@ -39,31 +39,6 @@ const rootNode = {
   depth: 0,
   children: [],
 };
-
-function getAliases(confPath) {
-  // Ban relative paths to config file
-  if (confPath.substring(0, 2) !== './') {
-    console.error('Path given must be relative to the execution environment.');
-    return {};
-  }
-  if (confPath.includes('../')) {
-    console.error('Backtracking paths are disallowed.');
-    return {};
-  }
-  let resolvedAliases = {};
-  try {
-    const config = require(confPath);
-    if (config != null && config.resolve != null && config.resolve.alias != null) resolvedAliases = config.resolve.alias;
-  } catch (e) {
-    console.error(e.stack);
-  }
-  return resolvedAliases;
-}
-
-let fileAlises = {};
-if (typeof webpackConfigPath === 'string') {
-  fileAlises = getAliases(webpackConfigPath);
-}
 
 function extractModules(bodyItem) {
   if (
@@ -214,7 +189,7 @@ function processFile(node, file, depth) {
     const childComponents = _.uniq(extractChildComponents(ast.tokens, imports));
     node.children = childComponents.map(c => formatChild(c, node, depth));
   } else {
-    // Not JSX... try to search for a wrapped component
+    // Not JSX.. try to search for a wrapped component
     node.children = findContainerChild(node, ast.program.body, imports, depth);
   }
 }
@@ -275,25 +250,12 @@ function done() {
 
 // Get a list of names to try to resolve
 function getPossibleNames(baseName) {
-  /** @fixme If aliases have been provided (i.e. it is not empty) return these strings, along with any matches the file name baseName has with the aliases */
-  const list = [
+  return [
     baseName,
     baseName.replace('.js', '.jsx'),
     baseName.replace('.js', '/index.js'),
     baseName.replace('.js', '/index.jsx'),
   ];
-  // TODO - test
-  if (Object.keys(fileAlises).length > 0) {
-    // Match file name against aliases
-    const red = function resolveAlias(li, [key, value]) {
-      const [component, ...rest] = baseName.split('/');
-      const appended = [value, ...rest].join('/');
-      if (component === key) return li.concat([value, ...rest].join('/'));
-      return li;
-    };
-    li.push(Object.entries(fileAlises).reduce(red, []));
-  }
-  return list;
 }
 
 function processNode(node, depth, parent) {
@@ -317,12 +279,12 @@ function processNode(node, depth, parent) {
     node.filename = name;
     try {
       const file = readFileSync(node.filename, 'utf8');
-      if (depth <= scanDepth) {
+      if(depth <= scanDepth){
         processFile(node, file, depth);
       }
       node.children.forEach(c => processNode(c, depth + 1, node));
       return;
-    } catch (e) { console.error(`Could not open file: ${name}`) }
+    } catch (e) {}
   }
 
   if (hideThirdParty) {
