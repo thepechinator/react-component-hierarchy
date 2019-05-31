@@ -17,6 +17,7 @@ program
   .option('-j, --json', 'Output graph to JSON file instead of printing it on screen')
   .option('-m, --module-dir <dir>', 'Path to additional modules not included in node_modules e.g. src')
   .option('-t, --hide-third-party', 'Hide third party components')
+  .option('-p, --page', 'Parsing a mock page')
   .description('React component hierarchy viewer.')
   .parse(process.argv);
 
@@ -28,10 +29,25 @@ if (!program.args[0]) {
 const hideContainers = program.hideContainers;
 const scanDepth = Math.max(program.scanDepth,1);
 const outputJSON = program.json;
+const parsingPage = typeof program.page !== 'undefined';
 const moduleDir = program.moduleDir;
 const hideThirdParty = program.hideThirdParty;
 
 const filename = path.resolve(program.args[0]);
+
+console.info('parsingPage', parsingPage);
+
+const getRelativePath = (value) => {
+  return value.replace(process.cwd() + '/', '');
+}
+
+// our mappings
+const componentToMocks = {};
+const componentToComponents = {};
+
+// And so it begins...
+const pageId = program.args[0];
+// mockToComponents[pageId] = [];
 
 const rootNode = {
   name: path.basename(filename).replace(/\.jsx?/, ''),
@@ -172,7 +188,10 @@ function findContainerChild(node, body, imports, depth) {
   return (usedImport && [formatChild(usedImport, node, depth)]) || [];
 }
 
-function processFile(node, file, depth) {
+function processFile(node, file, depth, parent, parentIds) {
+  // console.info('parentIds', parentIds);
+  // console.info('node.filename', node.filename);
+  // console.info('processFile', node);
   const ast = babylon.parse(file, {
     sourceType: 'module',
     plugins: [
@@ -197,14 +216,50 @@ function processFile(node, file, depth) {
       imports = imports.concat(i);
     }
   }
+
+  const relativeFileName = getRelativePath(node.filename);
+  if (!componentToMocks[relativeFileName]) {
+    componentToMocks[relativeFileName] = new Set();
+  }
+  componentToMocks[relativeFileName].add(pageId);
+
   if (_.find(imports, { name: 'React' })) {
     // Look for children in the JSX
     const childComponents = _.uniq(extractChildComponents(ast.tokens, imports));
     // console.info('childComponents', childComponents);
+
+    // console.info('node.source', node.source);
+
+    // if node.source is undefined it means we're at the top level
     node.children = childComponents.map(c => formatChild(c, node, depth));
+    // console.info('node.children', node.children);
+
+    // add these children to each thing in the parentIds array
+    for (const parentId of parentIds) {
+      if (!componentToComponents[parentId]) {
+        componentToComponents[parentId] = new Set();
+      }
+      // const childIdsToAdd = node.children.map(c => c.filename);
+      // // console.info('parentId', parentId);
+      // // console.info('childIdsToAdd', childIdsToAdd);
+      // console.info('parentId', parentId);
+      // console.info('adding', childIdsToAdd.length);
+      componentToComponents[parentId].add(getRelativePath(node.filename));
+    }
   } else {
     // Not JSX.. try to search for a wrapped component
     node.children = findContainerChild(node, ast.program.body, imports, depth);
+    // add these children to each thing in the parentIds array
+    for (const parentId of parentIds) {
+      if (!componentToComponents[parentId]) {
+        componentToComponents[parentId] = new Set();
+      }
+      // const childIdsToAdd = node.children.map(c => c.filename);
+      // console.info('parentId', parentId);
+      // console.info('adding', childIdsToAdd.length);
+      componentToComponents[parentId].add(getRelativePath(node.filename));
+    }
+    // console.info('node.children', node.children);
   }
 }
 
@@ -258,8 +313,31 @@ function done() {
     );
     process.exit(1);
   }
-  if (outputJSON) writeFileSync('data.json', JSON.stringify(rootNode));
-  else console.log(tree(formatNodeToPrettyTree(rootNode)));
+
+  Object.keys(componentToComponents).forEach(k => {
+    componentToComponents[k] = Array.from(componentToComponents[k]);
+  });
+  // console.info('componentToComponents', componentToComponents);
+
+  if (parsingPage) {
+    Object.keys(componentToMocks).forEach(k => {
+      componentToMocks[k] = Array.from(componentToMocks[k]);
+    });
+    // console.info('componentToMocks', componentToMocks);
+  }
+  // time to write the data to a file...
+  if (outputJSON) {
+    const outputPath = path.join(process.cwd(), `peeping-tom/${program.args[0].replace(/[\/]/g, '_').replace('.js', '')}.json`);
+    // console.info('writing json to outputPath', outputPath);
+    writeFileSync(outputPath,
+      JSON.stringify({
+        componentToComponents,
+        componentToMocks,
+      }, null, '  ')
+    );
+  } else {
+    console.log(tree(formatNodeToPrettyTree(rootNode)));
+  }
   process.exit();
 }
 
@@ -273,7 +351,12 @@ function getPossibleNames(baseName) {
   ];
 }
 
-function processNode(node, depth, parent) {
+function processNode(node, depth, parent, parentIds) {
+  const newParentIds = [ ...parentIds ];
+  if (typeof parent !== 'undefined' && parent) {
+    newParentIds.push(getRelativePath(parent.filename));
+  }
+
   const fileExt = path.extname(node.filename);
   if (fileExt === '') {
     // It's likely users will reference files that do not have an extension, try .js and then .jsx
@@ -296,10 +379,10 @@ function processNode(node, depth, parent) {
     try {
       const file = readFileSync(node.filename, 'utf8');
       if(depth <= scanDepth){
-        processFile(node, file, depth);
+        processFile(node, file, depth, parent, newParentIds);
       }
 
-      node.children.forEach(c => processNode(c, depth + 1, node));
+      node.children.forEach(c => processNode(c, depth + 1, node, newParentIds));
       return;
     } catch (e) {
       // console.info('e', e.stack);
@@ -311,5 +394,5 @@ function processNode(node, depth, parent) {
   }
 }
 
-processNode(rootNode, 1);
+processNode(rootNode, 1, null, []);
 done();

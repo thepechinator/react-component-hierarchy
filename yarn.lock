@@ -51,9 +51,9 @@ lodash@^4.13.1:
   version "4.17.10"
   resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.10.tgz#1b7793cf7259ea38fb3661d4d38b3260af8ae4e7"
 
-pretty-tree@surreal9/pretty-tree:
+pretty-tree@jeffymahoney/pretty-tree:
   version "1.0.0"
-  resolved "https://codeload.github.com/surreal9/pretty-tree/tar.gz/dbdb636c397c33da98fc94a15f2461ede2422057"
+  resolved "https://codeload.github.com/jeffymahoney/pretty-tree/tar.gz/d080dee579681ad1f4deba459d6247500afbe7c8"
   dependencies:
     archy "0.0.2"
     chalk "~1.0.0"
