@@ -48,6 +48,7 @@ function extractModules(bodyItem) {
     // There may be more than one import in the declaration
     return bodyItem.specifiers.map(specifier => ({
       name: specifier.local.name,
+      // change the source appropriately
       source: bodyItem.source.value,
     }));
   }
@@ -55,28 +56,36 @@ function extractModules(bodyItem) {
 }
 
 function extractChildComponents(tokens, imports) {
-  const childComponents = [];
+  const childComponents = [ ...imports ].filter((v) => {
+    // now we need to scan relative paths...
+    // TODO: pass these filters in as a flag
+    return v.source.includes('components/') || v.source.includes('containers/') || v.source.includes('..');
+  });
+
   let childComponent;
-  for (var i = 0; i < tokens.length - 1; i++) {
-    if (
-      tokens[i].type.label === 'jsxTagStart' &&
-      tokens[i + 1].type.label === 'jsxName'
-    ) {
-      childComponent = _.find(imports, { name: tokens[i + 1].value });
-      if (childComponent) {
-        childComponents.push(childComponent);
-      }
-    } else if (
-      tokens[i].type.label === 'jsxName' &&
-      tokens[i].value === 'component'
-    ) {
-      // Find use of components in react-router, e.g. `<Route component={...}>`
-      childComponent = _.find(imports, { name: tokens[i + 3].value });
-      if (childComponent) {
-        childComponents.push(childComponent);
-      }
-    }
-  }
+  // console.info('imports', imports);
+
+  // need to map something based off styled components
+  // for (var i = 0; i < tokens.length - 1; i++) {
+  //   if (
+  //     tokens[i].type.label === 'jsxTagStart' &&
+  //     tokens[i + 1].type.label === 'jsxName'
+  //   ) {
+  //     childComponent = _.find(imports, { name: tokens[i + 1].value });
+  //     if (childComponent) {
+  //       childComponents.push(childComponent);
+  //     }
+  //   } else if (
+  //     tokens[i].type.label === 'jsxName' &&
+  //     tokens[i].value === 'component'
+  //   ) {
+  //     // Find use of components in react-router, e.g. `<Route component={...}>`
+  //     childComponent = _.find(imports, { name: tokens[i + 3].value });
+  //     if (childComponent) {
+  //       childComponents.push(childComponent);
+  //     }
+  //   }
+  // }
   return childComponents;
 }
 
@@ -87,9 +96,12 @@ function formatChild(child, parent, depth) {
   if (child.source.startsWith('.')) {
     // Relative import (./ or ../)
     fileName = path.resolve(path.dirname(parent.filename) + '/' + child.source);
+    // TODO: pass process.cwd() value in as a flag
     source = fileName.replace(process.cwd() + '/', '');
   } else {
-    fileName = path.join(path.dirname(parent.filename), child.source);
+    // TODO: pass process.cwd() in as a flag
+    fileName = path.join(process.cwd(), 'src', child.source);
+    // console.info('fileName', fileName);
     source = child.source;
   }
   return {
@@ -179,6 +191,7 @@ function processFile(node, file, depth) {
 
   // Get a list of imports and try to figure out which are child components
   let imports = [];
+
   for (const i of ast.program.body.map(extractModules)) {
     if (!!i) {
       imports = imports.concat(i);
@@ -187,6 +200,7 @@ function processFile(node, file, depth) {
   if (_.find(imports, { name: 'React' })) {
     // Look for children in the JSX
     const childComponents = _.uniq(extractChildComponents(ast.tokens, imports));
+    // console.info('childComponents', childComponents);
     node.children = childComponents.map(c => formatChild(c, node, depth));
   } else {
     // Not JSX.. try to search for a wrapped component
@@ -199,6 +213,7 @@ function formatNodeToPrettyTree(node) {
     node.children[0].name += ' (*)';
     return formatNodeToPrettyTree(node.children[0]);
   }
+
   // If we have the source, format it nicely like `module/Component`
   // But only if the name won't be repeated like `module/Component/Component`
   const source =
@@ -275,6 +290,7 @@ function processNode(node, depth, parent) {
     possibleFiles = possibleFiles.concat(getPossibleNames(baseName));
   }
 
+  // console.info('possibleFiles', possibleFiles);
   for (const name of possibleFiles) {
     node.filename = name;
     try {
@@ -282,9 +298,12 @@ function processNode(node, depth, parent) {
       if(depth <= scanDepth){
         processFile(node, file, depth);
       }
+
       node.children.forEach(c => processNode(c, depth + 1, node));
       return;
-    } catch (e) {}
+    } catch (e) {
+      // console.info('e', e.stack);
+    }
   }
 
   if (hideThirdParty) {
