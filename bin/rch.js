@@ -7,6 +7,7 @@ const babylon = require('babylon');
 const { readFileSync, writeFileSync } = require('fs');
 const _ = require('lodash');
 const tree = require('pretty-tree');
+const globby = require('globby');
 
 program
   .version('1.1.1')
@@ -17,7 +18,8 @@ program
   .option('-j, --json', 'Output graph to JSON file instead of printing it on screen')
   .option('-m, --module-dir <dir>', 'Path to additional modules not included in node_modules e.g. src')
   .option('-t, --hide-third-party', 'Hide third party components')
-  .option('-p, --page', 'Parsing a mock page')
+  // .option('-p, --page', 'Parsing a mock page')
+  .option('-o, --output <output>', 'Path to output json')
   .description('React component hierarchy viewer.')
   .parse(process.argv);
 
@@ -29,13 +31,15 @@ if (!program.args[0]) {
 const hideContainers = program.hideContainers;
 const scanDepth = Math.max(program.scanDepth,1);
 const outputJSON = program.json;
-const parsingPage = typeof program.page !== 'undefined';
+// const parsingPage = typeof program.page !== 'undefined';
 const moduleDir = program.moduleDir;
 const hideThirdParty = program.hideThirdParty;
+const outputPath = program.output || 'data.json';
 
-const filename = path.resolve(program.args[0]);
+// use globby and extract the targets
+// const filenames = path.resolve(program.args[0]);
 
-console.info('parsingPage', parsingPage);
+// console.info('parsingPage', parsingPage);
 
 const getRelativePath = (value) => {
   return value.replace(process.cwd() + '/', '');
@@ -46,15 +50,8 @@ const componentToMocks = {};
 const componentToComponents = {};
 
 // And so it begins...
-const pageId = program.args[0];
+// const pageId = program.args[0];
 // mockToComponents[pageId] = [];
-
-const rootNode = {
-  name: path.basename(filename).replace(/\.jsx?/, ''),
-  filename,
-  depth: 0,
-  children: [],
-};
 
 function extractModules(bodyItem) {
   if (
@@ -188,7 +185,7 @@ function findContainerChild(node, body, imports, depth) {
   return (usedImport && [formatChild(usedImport, node, depth)]) || [];
 }
 
-function processFile(node, file, depth, parent, parentIds) {
+function processFile(node, file, depth, parent, parentIds, pageId) {
   // console.info('parentIds', parentIds);
   // console.info('node.filename', node.filename);
   // console.info('processFile', node);
@@ -307,36 +304,36 @@ function formatNodeToPrettyTree(node) {
 }
 
 function done() {
-  if (!rootNode.children) {
-    console.error(
-      'Could not find any components. Did you process the right file?'
-    );
-    process.exit(1);
-  }
+  // if (!rootNode.children) {
+  //   console.error(
+  //     'Could not find any components. Did you process the right file?'
+  //   );
+  //   process.exit(1);
+  // }
 
   Object.keys(componentToComponents).forEach(k => {
     componentToComponents[k] = Array.from(componentToComponents[k]);
   });
   // console.info('componentToComponents', componentToComponents);
 
-  if (parsingPage) {
-    Object.keys(componentToMocks).forEach(k => {
-      componentToMocks[k] = Array.from(componentToMocks[k]);
-    });
-    // console.info('componentToMocks', componentToMocks);
-  }
+  // if (parsingPage) {
+  Object.keys(componentToMocks).forEach(k => {
+    componentToMocks[k] = Array.from(componentToMocks[k]);
+  });
+  // console.info('componentToMocks', componentToMocks);
+  // }
   // time to write the data to a file...
   if (outputJSON) {
-    const outputPath = path.join(process.cwd(), `peeping-tom/${program.args[0].replace(/[\/]/g, '_').replace('.js', '')}.json`);
+    const writeToPath = path.join(process.cwd(), outputPath);
     // console.info('writing json to outputPath', outputPath);
-    writeFileSync(outputPath,
+    writeFileSync(writeToPath,
       JSON.stringify({
         componentToComponents,
         componentToMocks,
       }, null, '  ')
     );
   } else {
-    console.log(tree(formatNodeToPrettyTree(rootNode)));
+    // console.log(tree(formatNodeToPrettyTree(rootNode)));
   }
   process.exit();
 }
@@ -351,7 +348,7 @@ function getPossibleNames(baseName) {
   ];
 }
 
-function processNode(node, depth, parent, parentIds) {
+function processNode(node, depth, parent, parentIds, pageId) {
   const newParentIds = [ ...parentIds ];
   if (typeof parent !== 'undefined' && parent) {
     newParentIds.push(getRelativePath(parent.filename));
@@ -379,10 +376,10 @@ function processNode(node, depth, parent, parentIds) {
     try {
       const file = readFileSync(node.filename, 'utf8');
       if(depth <= scanDepth){
-        processFile(node, file, depth, parent, newParentIds);
+        processFile(node, file, depth, parent, newParentIds, pageId);
       }
 
-      node.children.forEach(c => processNode(c, depth + 1, node, newParentIds));
+      node.children.forEach(c => processNode(c, depth + 1, node, newParentIds, pageId));
       return;
     } catch (e) {
       // console.info('e', e.stack);
@@ -394,5 +391,28 @@ function processNode(node, depth, parent, parentIds) {
   }
 }
 
-processNode(rootNode, 1, null, []);
-done();
+// do this for many...
+console.info('program.args[0]', program.args[0]);
+const filenames = globby.sync(program.args[0]);
+// console.info('filenames', filenames);
+// put in a loop
+const promises = [];
+console.info('filenames.length', filenames.length);
+for (const filename of filenames) {
+  const promise = new Promise(resolve => {
+    console.info('loop', filename);
+    const rootNode = {
+      name: path.basename(filename).replace(/\.jsx?/, ''),
+      filename,
+      depth: 0,
+      children: [],
+    };
+    processNode(rootNode, 1, null, [], filename);
+    console.info('resolved', filename);
+    resolve();
+  });
+
+  promises.push(promise);
+}
+
+return Promise.all(promises).then(done);
